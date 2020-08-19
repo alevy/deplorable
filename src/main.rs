@@ -2,50 +2,12 @@ use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response, Server};
 use std::net::SocketAddr;
 
-#[derive(Clone)]
-struct Nixhub {
-    owner: String,
-    repo: String,
-    reference: String,
-    out: String,
-    token: Option<String>,
-}
-
-impl Nixhub {
-    async fn request_tarball_location(
-        &self,
-    ) -> Result<reqwest::header::HeaderValue, reqwest::Error> {
-        let url = format!(
-            "https://api.github.com/repos/{}/{}/tarball/{}",
-            self.owner, self.repo, self.reference
-        );
-        let client = reqwest::Client::builder()
-            .user_agent("Nix builder")
-            .redirect(reqwest::redirect::Policy::none())
-            .build()?;
-        let mut request = client.get(&url);
-        if let Some(token) = self.token.as_ref() {
-            request = request.header("Authorization", format!("token {}", token));
-        }
-        let resp = request.send().await?;
-        Ok(resp.headers()["location"].clone())
-    }
-}
+mod nixhub;
 
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
     use clap::{App, Arg};
     let arg_matches = App::new("Nixhub Builder")
-        .arg(
-            Arg::with_name("owner")
-                .short("O")
-                .long("owner")
-                .value_name("OWNER")
-                .help("Repository owner")
-                .required(true)
-                .display_order(0)
-                .takes_value(true),
-        )
         .arg(
             Arg::with_name("repo")
                 .short("R")
@@ -95,8 +57,7 @@ async fn main() -> Result<(), std::io::Error> {
         )
         .get_matches();
 
-    let nixhub: &'static Nixhub = Box::leak(Box::new(Nixhub {
-        owner: String::from(arg_matches.value_of("owner").expect("owner")),
+    let nixhub: &'static nixhub::Nixhub = Box::leak(Box::new(nixhub::Nixhub {
         repo: String::from(arg_matches.value_of("repo").expect("repo")),
         reference: arg_matches.value_of("ref").expect("ref").to_string(),
         out: arg_matches.value_of("out").expect("out").to_string(),
@@ -105,28 +66,15 @@ async fn main() -> Result<(), std::io::Error> {
             .map(|t| t.to_string())
             .or_else(|| std::env::var("GITHUB_TOKEN").ok()),
     }));
-    if let Ok(location) = nixhub.request_tarball_location().await {
-        std::process::Command::new("nix-build")
-            .arg("--out-link")
-            .arg(&nixhub.out)
-            .arg(location.to_str().unwrap())
-            .spawn()?
-            .wait()?;
-    }
+    nixhub.build().await?;
+
     let listen = arg_matches.value_of("listen").expect("listen").clone();
 
     let addr: SocketAddr = listen.parse().expect("Couldn't parse listen address");
 
     let svc = make_service_fn(|_| async move {
         Ok::<_, std::io::Error>(service_fn(move |_: Request<Body>| async move {
-            if let Ok(location) = nixhub.request_tarball_location().await {
-                std::process::Command::new("nix-build")
-                    .arg("--out-link")
-                    .arg(&nixhub.out)
-                    .arg(location.to_str().unwrap())
-                    .spawn()?
-                    .wait()?;
-            }
+            nixhub.build().await?;
             Ok::<_, std::io::Error>(Response::new(Body::empty()))
         }))
     });
