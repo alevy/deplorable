@@ -1,5 +1,5 @@
 use std::io::prelude::*;
-use std::net::TcpStream;
+use std::net::{TcpListener, TcpStream};
 
 use bytes::{BufMut, Bytes, BytesMut};
 use http;
@@ -93,14 +93,45 @@ impl Client {
         write!(self.stream, "\r\n")?;
         self.stream.write_all(body)
     }
+}
 
-    pub fn write_response_ok(&mut self, body: &Bytes) -> Result<(), std::io::Error> {
-        self.write_response(&http::Response::builder().status(200).body(body).unwrap())?;
-        write!(
-            self.stream,
-            "HTTP/1.1 200 Ok\r\nContent-Length: {}\r\n\r\n",
-            body.len()
-        )?;
-        self.stream.write_all(body.as_ref())
+pub trait Handler {
+    fn handle_request(&mut self, request: &http::Request<Bytes>) -> http::Response<Bytes>;
+}
+
+pub struct Server<H> {
+    listener: TcpListener,
+    handler: H,
+}
+
+fn request_helper<H: Handler>(client: &mut Client, handler: &mut H) -> Result<(), std::io::Error> {
+    let request = client.read()?;
+    client.write_response(&handler.handle_request(&request))
+}
+
+impl<H> Server<H> {
+    pub fn new(listener: TcpListener, handler: H) -> Server<H> {
+        Server { listener, handler }
+    }
+}
+
+impl<H: 'static + Handler + Send + Clone> Server<H> {
+    pub fn run(&self) -> Result<(), std::io::Error> {
+        for stream in self.listener.incoming() {
+            let stream = stream?;
+            let mut handler = self.handler.clone();
+            std::thread::spawn(move || {
+                let mut client = Client::new(stream);
+                loop {
+                    if let Err(r) = request_helper(&mut client, &mut handler) {
+                        if r.kind() != std::io::ErrorKind::UnexpectedEof {
+                            eprintln!("{}", r);
+                        }
+                        break;
+                    }
+                }
+            });
+        }
+        Ok(())
     }
 }

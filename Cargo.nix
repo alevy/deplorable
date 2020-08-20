@@ -385,6 +385,20 @@ rec {
         ];
         
       };
+      "fnv" = rec {
+        crateName = "fnv";
+        version = "1.0.7";
+        edition = "2015";
+        sha256 = "1hc2mcqha06aibcaza94vbi81j6pr9a1bbxrxjfhc91zin8yr7iz";
+        libPath = "lib.rs";
+        authors = [
+          "Alex Crichton <alex@alexcrichton.com>"
+        ];
+        features = {
+          "default" = [ "std" ];
+        };
+        resolvedDefaultFeatures = [ "default" "std" ];
+      };
       "hermit-abi" = rec {
         crateName = "hermit-abi";
         version = "0.1.15";
@@ -405,6 +419,32 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" ];
       };
+      "http" = rec {
+        crateName = "http";
+        version = "0.2.1";
+        edition = "2018";
+        sha256 = "1y827q7j0gvs8z2x12biaik9db6nb902lpqv889cbcj84sbnkm98";
+        authors = [
+          "Alex Crichton <alex@alexcrichton.com>"
+          "Carl Lerche <me@carllerche.com>"
+          "Sean McArthur <sean@seanmonstar.com>"
+        ];
+        dependencies = [
+          {
+            name = "bytes";
+            packageId = "bytes";
+          }
+          {
+            name = "fnv";
+            packageId = "fnv";
+          }
+          {
+            name = "itoa";
+            packageId = "itoa";
+          }
+        ];
+        
+      };
       "httparse" = rec {
         crateName = "httparse";
         version = "1.3.4";
@@ -412,6 +452,19 @@ rec {
         sha256 = "1yf23ldnjwfkkhkca7f4w15mky9961gjz28dlwyybhphc7l9l5yd";
         authors = [
           "Sean McArthur <sean@seanmonstar.com>"
+        ];
+        features = {
+          "default" = [ "std" ];
+        };
+        resolvedDefaultFeatures = [ "default" "std" ];
+      };
+      "itoa" = rec {
+        crateName = "itoa";
+        version = "0.4.6";
+        edition = "2015";
+        sha256 = "1rnpb7rr8df76gnlk07b9086cn7fc0dxxy1ghh00q6nip7bklvyw";
+        authors = [
+          "David Tolnay <dtolnay@gmail.com>"
         ];
         features = {
           "default" = [ "std" ];
@@ -554,6 +607,10 @@ rec {
           {
             name = "curl";
             packageId = "curl";
+          }
+          {
+            name = "http";
+            packageId = "http";
           }
           {
             name = "httparse";
