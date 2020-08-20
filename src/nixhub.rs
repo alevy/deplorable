@@ -1,4 +1,5 @@
-use tokio::time::{delay_for, Duration};
+use std::time::Duration;
+use curl::easy::{Easy, List};
 
 #[derive(Clone)]
 pub struct Nixhub {
@@ -9,36 +10,36 @@ pub struct Nixhub {
 }
 
 impl Nixhub {
-    pub async fn request_tarball_location(
+    pub fn request_tarball_location(
         &self,
-    ) -> Option<reqwest::header::HeaderValue> {
+    ) -> Result<Option<String>, std::io::Error> {
+
         let url = format!(
             "https://api.github.com/repos/{}/tarball/{}",
             self.repo, self.reference
         );
-        let client = reqwest::Client::builder()
-            .user_agent("Nix builder")
-            .redirect(reqwest::redirect::Policy::none())
-            .build().ok()?;
-        let mut request = client.get(&url);
+        let mut easy = Easy::new();
+        easy.url(url.as_str())?;
+        easy.useragent("Nix builder")?;
         if let Some(token) = self.token.as_ref() {
-            request = request.header("Authorization", format!("token {}", token));
+            let mut headers = List::new();
+            headers.append(format!("Authorization: token {}", token).as_str())?;
+            easy.http_headers(headers)?;
         }
-        request.send().await.ok().and_then(|resp: reqwest::Response| {
-            resp.headers().get("location").map(|l| l.clone())
-        })
+        easy.perform()?;
+        Ok(easy.redirect_url()?.map(|s| s.to_string()))
     }
 
-    pub async fn build(&self) -> Result<(), std::io::Error> {
+    pub fn build(&self) -> Result<(), std::io::Error> {
         let mut dt = 200;
         loop {
-            if let Some(location) = self.request_tarball_location().await {
+            if let Some(location) = self.request_tarball_location()? {
                 let mut cmd = std::process::Command::new("nix");
                 cmd.arg("build")
                     .arg("--out-link")
                     .arg(&self.out)
                     .arg("-f")
-                    .arg(location.to_str().unwrap());
+                    .arg(location);
                 if cmd.status()?.success() {
                     eprintln!("Built \"{}\" at ref \"{}\" successfully", self.repo, self.reference);
                     break;
@@ -47,7 +48,7 @@ impl Nixhub {
                 }
             } else {
                 eprintln!("Failed to get tarball location for \"{}\" at ref \"{}\"", self.repo, self.reference);
-                delay_for(Duration::from_millis(dt)).await;
+                std::thread::sleep(Duration::from_millis(dt));
                 // exponential decay
                 if dt < 30 * 60000 {
                     dt = dt * 2;

@@ -7,7 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+bytes = "*"
+curl = "*"
 clap = {"version"= "*", features=["yaml"]}
-reqwest = "*"
-tokio = {"version"= "0.2", features=["macros", "signal"]}
-hyper = "*"
+httparse = "*"

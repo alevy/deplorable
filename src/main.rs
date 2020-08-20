@@ -1,11 +1,10 @@
-use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Request, Response, Server};
-use std::net::SocketAddr;
+use std::net::TcpListener;
+use std::sync::{Arc, Condvar, Mutex};
 
 mod nixhub;
+mod http;
 
-#[tokio::main]
-async fn main() -> Result<(), std::io::Error> {
+fn main() -> Result<(), std::io::Error> {
     use clap::{App, Arg};
     let arg_matches = App::new("Nixhub Builder")
         .arg(
@@ -57,40 +56,54 @@ async fn main() -> Result<(), std::io::Error> {
         )
         .get_matches();
 
-    let nixhub: &'static nixhub::Nixhub = Box::leak(Box::new(nixhub::Nixhub {
-        repo: String::from(arg_matches.value_of("repo").expect("repo")),
+    let pair = Arc::new((Mutex::new(false), Condvar::new()));
+    let repo = String::from(arg_matches.value_of("repo").expect("repo"));
+    let nh: nixhub::Nixhub = nixhub::Nixhub {
+        repo: repo.clone(),
         reference: arg_matches.value_of("ref").expect("ref").to_string(),
         out: arg_matches.value_of("out").expect("out").to_string(),
         token: arg_matches
             .value_of("token")
             .map(|t| t.to_string())
             .or_else(|| std::env::var("GITHUB_TOKEN").ok()),
-    }));
-    nixhub.build().await?;
+    };
 
-    let listen = arg_matches.value_of("listen").expect("listen").clone();
-
-    let addr: SocketAddr = listen.parse().expect("Couldn't parse listen address");
-
-    let svc = make_service_fn(|_| async move {
-        Ok::<_, std::io::Error>(service_fn(move |_: Request<Body>| async move {
-            nixhub.build().await?;
-            Ok::<_, std::io::Error>(Response::new(Body::empty()))
-        }))
+    let pair2 = pair.clone();
+    std::thread::spawn(move || {
+        let (lock, cvar) = &*pair2;
+        loop {
+            {
+                let mut started = lock.lock().unwrap();
+                while !*started {
+                    started = cvar.wait(started).unwrap();
+                }
+                *started = false;
+            }
+            let _ = nh.build();
+        }
     });
 
-    let server = Server::bind(&addr).serve(svc);
-    async fn shutdown_signal() {
-        // Wait for the CTRL+C signal
-        tokio::signal::ctrl_c()
-            .await
-            .expect("failed to install CTRL+C signal handler");
+    let listen = arg_matches.value_of("listen").expect("listen").clone();
+    let listener = TcpListener::bind(listen)?;
+    for stream in listener.incoming() {
+        let stream = stream?;
+        let pair = pair.clone();
+        let repo = repo.clone();
+        std::thread::spawn(move || {
+            let (lock, cvar) = &*pair;
+            let mut client = http::Client::new(stream); 
+            if let Ok((request, body)) = client.read() {
+                if let Some(path) = request.path {
+                    if &path[1..] == repo {
+                        let mut started = lock.lock().unwrap();
+                        *started = true;
+                        cvar.notify_one();
+                    }
+                }
+                let _ = client.respond_ok(body);
+            }
+        });
     }
-    let graceful = server.with_graceful_shutdown(shutdown_signal());
-    println!("Listening at {}", addr);
-    // Run this server for... forever!
-    if let Err(e) = graceful.await {
-        eprintln!("server error: {}", e);
-    }
+
     Ok(())
 }
