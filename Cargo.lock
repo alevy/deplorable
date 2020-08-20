@@ -195,7 +195,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "nixhub"
+name = "nixlify"
 version = "0.1.0"
 dependencies = [
  "bytes",

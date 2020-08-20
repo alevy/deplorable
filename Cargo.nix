@@ -24,7 +24,7 @@ rec {
   #
 
   rootCrate = rec {
-    packageId = "nixhub";
+    packageId = "nixlify";
 
     # Use this attribute to refer to the derivation building your root crate package.
     # You can override the features with rootCrate.build.override { features = [ "default" "feature1" ... ]; }.
@@ -44,10 +44,10 @@ rec {
   # You can override the features with
   # workspaceMembers."${crateName}".build.override { features = [ "default" "feature1" ... ]; }.
   workspaceMembers = {
-    "nixhub" = rec {
-      packageId = "nixhub";
+    "nixlify" = rec {
+      packageId = "nixlify";
       build = internal.buildRustCrateWithFeatures {
-        packageId = "nixhub";
+        packageId = "nixlify";
       };
 
       # Debug support which might change between releases.
@@ -583,12 +583,12 @@ rec {
           "kv_unstable_sval" = [ "kv_unstable" "sval/fmt" ];
         };
       };
-      "nixhub" = rec {
-        crateName = "nixhub";
+      "nixlify" = rec {
+        crateName = "nixlify";
         version = "0.1.0";
         edition = "2018";
         crateBin = [
-          { name = "nixhub"; path = "src/main.rs"; }
+          { name = "nixlify"; path = "src/main.rs"; }
         ];
         src = (builtins.filterSource sourceFilter ./.);
         authors = [
