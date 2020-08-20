@@ -1,10 +1,10 @@
+use bytes::Bytes;
 use std::collections::BTreeMap;
 use std::net::TcpListener;
 use std::sync::{Arc, Condvar, Mutex};
-use bytes::Bytes;
 
 mod config;
-mod http;
+mod server;
 
 fn main() -> Result<(), std::io::Error> {
     use clap::{App, Arg};
@@ -30,7 +30,12 @@ fn main() -> Result<(), std::io::Error> {
         .get_matches();
 
     let config: config::Config = {
-        let config_file = std::fs::File::open(arg_matches.value_of("config file").expect("config file").clone())?;
+        let config_file = std::fs::File::open(
+            arg_matches
+                .value_of("config file")
+                .expect("config file")
+                .clone(),
+        )?;
         serde_yaml::from_reader(config_file)
             .map_err(|e| eprintln!("{:?}", e))
             .unwrap()
@@ -66,19 +71,41 @@ fn main() -> Result<(), std::io::Error> {
         let stream = stream?;
         let conditions = conditions.clone();
         std::thread::spawn(move || {
-            let mut client = http::Client::new(stream);
-            if let Ok((request, body)) = client.read() {
-                if let Some(path) = request.path {
-                    if let Some(pair) = conditions.get(&path[1..].to_string()) {
-                        let (lock, cvar, secret) = &**pair;
-                        if verify_request(secret, &body, request.headers.get("x-hub-signature").unwrap_or(&String::new())) {
-                            let mut started = lock.lock().unwrap();
-                            *started = true;
-                            cvar.notify_one();
+            let mut client = server::Client::new(stream);
+            let empty_body = Bytes::new();
+            loop {
+                match client.read() {
+                    Ok(request) => {
+                        let path = request.uri().path();
+                        let response = if let Some(pair) = conditions.get(&path[1..].to_string()) {
+                            let (lock, cvar, secret) = &**pair;
+                            if verify_request(
+                                secret,
+                                &request.body(),
+                                request
+                                    .headers()
+                                    .get("x-hub-signature")
+                                    .map(|v| v.as_bytes()),
+                            ) {
+                                let mut started = lock.lock().unwrap();
+                                *started = true;
+                                cvar.notify_one();
+                                http::Response::builder().body(request.body())
+                            } else {
+                                http::Response::builder().status(http::status::StatusCode::UNAUTHORIZED).body(&empty_body)
+                            }
+                        } else {
+                            http::Response::builder().status(http::status::StatusCode::NOT_FOUND).body(&empty_body)
+                        };
+                        let _ = client.write_response(&response.unwrap());
+                    },
+                    Err(r) => {
+                        if r.kind() != std::io::ErrorKind::UnexpectedEof {
+                            eprintln!("{}", r);
                         }
-                    }
+                        break;
+                    },
                 }
-                let _ = client.respond_ok(body);
             }
         });
     }
@@ -86,11 +113,17 @@ fn main() -> Result<(), std::io::Error> {
     Ok(())
 }
 
-fn verify_request(secret: &Option<String>, payload: &Bytes, tag: &String) -> bool {
+fn verify_request(secret: &Option<String>, payload: &Bytes, tag: Option<&[u8]>) -> bool {
     use ring::hmac;
     if let Some(secret) = secret {
-        let key = hmac::Key::new(hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, secret.as_bytes());
-        tag.starts_with("sha1=") && hmac::verify(&key, payload.as_ref(), tag[5..].as_bytes()).is_ok()
+        if let Some(tag) = tag {
+            let tag = String::from_utf8_lossy(tag);
+            let key = hmac::Key::new(hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, secret.as_bytes());
+            tag.starts_with("sha1=")
+                && hmac::verify(&key, payload.as_ref(), tag[5..].as_bytes()).is_ok()
+        } else {
+            false
+        }
     } else {
         true
     }

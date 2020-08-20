@@ -11,6 +11,7 @@ bytes = "*"
 curl = "*"
 clap = {"version"= "*", features=["yaml"]}
 ring = "*"
+http = "*"
 httparse = "*"
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "*"
