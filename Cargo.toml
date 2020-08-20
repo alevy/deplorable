@@ -10,4 +10,7 @@ edition = "2018"
 bytes = "*"
 curl = "*"
 clap = {"version"= "*", features=["yaml"]}
+ring = "*"
 httparse = "*"
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "*"

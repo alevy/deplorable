@@ -1,19 +1,24 @@
-use std::time::Duration;
 use curl::easy::{Easy, List};
+use serde::Deserialize;
+use std::collections::BTreeMap;
+use std::time::Duration;
 
-#[derive(Clone)]
-pub struct Nixhub {
+#[derive(Clone, Debug, Deserialize)]
+pub struct Config {
+    pub repos: BTreeMap<String, Repo>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct Repo {
     pub repo: String,
     pub reference: String,
     pub out: String,
     pub token: Option<String>,
+    pub secret: Option<String>,
 }
 
-impl Nixhub {
-    pub fn request_tarball_location(
-        &self,
-    ) -> Result<Option<String>, std::io::Error> {
-
+impl Repo {
+    pub fn request_tarball_location(&self) -> Result<Option<String>, std::io::Error> {
         let url = format!(
             "https://api.github.com/repos/{}/tarball/{}",
             self.repo, self.reference
@@ -41,13 +46,19 @@ impl Nixhub {
                     .arg("-f")
                     .arg(location);
                 if cmd.status()?.success() {
-                    eprintln!("Built \"{}\" at ref \"{}\" successfully", self.repo, self.reference);
+                    eprintln!(
+                        "Built \"{}\" at ref \"{}\" successfully",
+                        self.repo, self.reference
+                    );
                     break;
                 } else {
                     eprintln!("Failed to execute {:?}", cmd);
                 }
             } else {
-                eprintln!("Failed to get tarball location for \"{}\" at ref \"{}\"", self.repo, self.reference);
+                eprintln!(
+                    "Failed to get tarball location for \"{}\" at ref \"{}\"",
+                    self.repo, self.reference
+                );
                 std::thread::sleep(Duration::from_millis(dt));
                 // exponential decay
                 if dt < 30 * 60000 {

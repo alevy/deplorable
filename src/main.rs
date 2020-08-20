@@ -1,48 +1,21 @@
+use std::collections::BTreeMap;
 use std::net::TcpListener;
 use std::sync::{Arc, Condvar, Mutex};
+use bytes::Bytes;
 
-mod nixhub;
+mod config;
 mod http;
 
 fn main() -> Result<(), std::io::Error> {
     use clap::{App, Arg};
     let arg_matches = App::new("Nixhub Builder")
         .arg(
-            Arg::with_name("repo")
-                .short("R")
-                .long("repo")
-                .value_name("REPOSITORY")
-                .help("Repository name")
-                .required(true)
-                .display_order(1)
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("ref")
-                .short("r")
-                .long("ref")
-                .value_name("REFERENCE")
-                .help("Git branch, version or commit hash")
-                .required(true)
-                .display_order(2)
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("out")
-                .short("o")
-                .long("out")
-                .value_name("OUT_LINK")
-                .default_value("result")
-                .display_order(4)
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name("token")
-                .short("t")
-                .long("auth-token")
-                .value_name("TOKEN")
-                .help("GitHub OAuth token (only necessary for private repositories)")
-                .display_order(3)
+            Arg::with_name("config file")
+                .short("c")
+                .long("config")
+                .value_name("PATH_TO_CONFIG_FILE")
+                .help("Path to YAML formatted configuration file")
+                .default_value("config.yaml")
                 .takes_value(true),
         )
         .arg(
@@ -56,48 +29,53 @@ fn main() -> Result<(), std::io::Error> {
         )
         .get_matches();
 
-    let pair = Arc::new((Mutex::new(false), Condvar::new()));
-    let repo = String::from(arg_matches.value_of("repo").expect("repo"));
-    let nh: nixhub::Nixhub = nixhub::Nixhub {
-        repo: repo.clone(),
-        reference: arg_matches.value_of("ref").expect("ref").to_string(),
-        out: arg_matches.value_of("out").expect("out").to_string(),
-        token: arg_matches
-            .value_of("token")
-            .map(|t| t.to_string())
-            .or_else(|| std::env::var("GITHUB_TOKEN").ok()),
+    let config: config::Config = {
+        let config_file = std::fs::File::open(arg_matches.value_of("config file").expect("config file").clone())?;
+        serde_yaml::from_reader(config_file)
+            .map_err(|e| eprintln!("{:?}", e))
+            .unwrap()
     };
-
-    let pair2 = pair.clone();
-    std::thread::spawn(move || {
-        let (lock, cvar) = &*pair2;
-        loop {
-            {
-                let mut started = lock.lock().unwrap();
-                while !*started {
-                    started = cvar.wait(started).unwrap();
+    let conditions = {
+        let mut map = BTreeMap::new();
+        for (slug, repo) in config.repos.iter() {
+            let pair = Arc::new((Mutex::new(false), Condvar::new(), repo.secret.clone()));
+            let tpair = pair.clone();
+            let repo = repo.clone();
+            map.insert(slug.clone(), pair);
+            std::thread::spawn(move || {
+                let _ = repo.build();
+                let (lock, cvar, _) = &*tpair;
+                loop {
+                    {
+                        let mut started = lock.lock().unwrap();
+                        while !*started {
+                            started = cvar.wait(started).unwrap();
+                        }
+                        *started = false;
+                    }
+                    let _ = repo.build();
                 }
-                *started = false;
-            }
-            let _ = nh.build();
+            });
         }
-    });
+        map
+    };
 
     let listen = arg_matches.value_of("listen").expect("listen").clone();
     let listener = TcpListener::bind(listen)?;
     for stream in listener.incoming() {
         let stream = stream?;
-        let pair = pair.clone();
-        let repo = repo.clone();
+        let conditions = conditions.clone();
         std::thread::spawn(move || {
-            let (lock, cvar) = &*pair;
-            let mut client = http::Client::new(stream); 
+            let mut client = http::Client::new(stream);
             if let Ok((request, body)) = client.read() {
                 if let Some(path) = request.path {
-                    if &path[1..] == repo {
-                        let mut started = lock.lock().unwrap();
-                        *started = true;
-                        cvar.notify_one();
+                    if let Some(pair) = conditions.get(&path[1..].to_string()) {
+                        let (lock, cvar, secret) = &**pair;
+                        if verify_request(secret, &body, request.headers.get("x-hub-signature").unwrap_or(&String::new())) {
+                            let mut started = lock.lock().unwrap();
+                            *started = true;
+                            cvar.notify_one();
+                        }
                     }
                 }
                 let _ = client.respond_ok(body);
@@ -106,4 +84,14 @@ fn main() -> Result<(), std::io::Error> {
     }
 
     Ok(())
+}
+
+fn verify_request(secret: &Option<String>, payload: &Bytes, tag: &String) -> bool {
+    use ring::hmac;
+    if let Some(secret) = secret {
+        let key = hmac::Key::new(hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, secret.as_bytes());
+        tag.starts_with("sha1=") && hmac::verify(&key, payload.as_ref(), tag[5..].as_bytes()).is_ok()
+    } else {
+        true
+    }
 }

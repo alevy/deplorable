@@ -1,11 +1,11 @@
+use bytes::{BufMut, Bytes, BytesMut};
 use std::collections::BTreeMap;
 use std::io::prelude::*;
 use std::net::TcpStream;
-use bytes::{Bytes, BytesMut, BufMut};
 
 #[derive(Debug)]
 pub struct Headers {
-    entries: BTreeMap<String, String>
+    entries: BTreeMap<String, String>,
 }
 
 impl Headers {
@@ -16,9 +16,7 @@ impl Headers {
             let value = String::from_utf8_lossy(header.value).to_string();
             entries.insert(name.to_lowercase(), value);
         }
-        Headers {
-            entries
-        }
+        Headers { entries }
     }
 
     pub fn get(&self, key: &str) -> Option<&String> {
@@ -43,7 +41,10 @@ impl Client {
         Client { stream }
     }
 
-    pub fn read_request(&mut self, buf: &mut BytesMut) -> Result<(Request, BytesMut), std::io::Error> {
+    pub fn read_request(
+        &mut self,
+        buf: &mut BytesMut,
+    ) -> Result<(Request, BytesMut), std::io::Error> {
         loop {
             let mut lowbuf = [0u8; 2048];
             let len = self.stream.read(&mut lowbuf)?;
@@ -70,9 +71,11 @@ impl Client {
     pub fn read(&mut self) -> Result<(Request, Bytes), std::io::Error> {
         let (request, mut buf) = self.read_request(&mut BytesMut::with_capacity(2048))?;
         buf = buf.split();
-        if let Some(length) = request.headers.get("content-length").and_then(|cl| {
-            cl.as_str().parse::<usize>().ok()
-        }) {
+        if let Some(length) = request
+            .headers
+            .get("content-length")
+            .and_then(|cl| cl.as_str().parse::<usize>().ok())
+        {
             let mut remaining = BytesMut::with_capacity(length - buf.len());
             remaining.resize(length - buf.len(), 0);
             self.stream.read_exact(remaining.as_mut())?;
@@ -82,8 +85,11 @@ impl Client {
     }
 
     pub fn respond_ok(&mut self, body: Bytes) -> Result<(), std::io::Error> {
-        write!(self.stream,
-            "HTTP/1.1 200 Ok\r\nContent-Length: {}\r\n\r\n", body.len())?;
+        write!(
+            self.stream,
+            "HTTP/1.1 200 Ok\r\nContent-Length: {}\r\n\r\n",
+            body.len()
+        )?;
         self.stream.write_all(body.as_ref())
     }
 }
