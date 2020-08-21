@@ -21,7 +21,10 @@ impl Client {
             let mut lowbuf = [0u8; 2048];
             let len = self.stream.read(&mut lowbuf)?;
             if len == 0 {
-                return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "Connection closed"));
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "Connection closed",
+                ));
             }
             buf.put(&lowbuf[..len]);
             let mut headers = [httparse::EMPTY_HEADER; 100];

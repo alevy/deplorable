@@ -1,8 +1,8 @@
 use std::net::TcpListener;
 
 mod config;
-mod server;
 mod nixlify;
+mod server;
 
 use nixlify::Nixlify;
 

@@ -56,14 +56,45 @@ impl server::Handler for Nixlify {
                 let mut started = lock.lock().unwrap();
                 *started = true;
                 cvar.notify_one();
-                http::Response::builder().body(request.body().clone()).unwrap()
+                http::Response::builder()
+                    .body(request.body().clone())
+                    .unwrap()
             } else {
-                http::Response::builder().status(http::status::StatusCode::UNAUTHORIZED).body(Bytes::new()).unwrap()
+                http::Response::builder()
+                    .status(http::status::StatusCode::UNAUTHORIZED)
+                    .body(Bytes::new())
+                    .unwrap()
             }
         } else {
-            http::Response::builder().status(http::status::StatusCode::NOT_FOUND).body(Bytes::new()).unwrap()
+            http::Response::builder()
+                .status(http::status::StatusCode::NOT_FOUND)
+                .body(Bytes::new())
+                .unwrap()
         }
     }
+}
+
+pub fn from_hex(hex_str: &str) -> Result<Vec<u8>, ()> {
+    fn from_digit(digit: u8) -> Result<u8, ()> {
+        match digit {
+            b'0'..=b'9' => Ok(digit - b'0'),
+            b'A'..=b'F' => Ok(10 + digit - b'A'),
+            b'a'..=b'f' => Ok(10 + digit - b'a'),
+            _ => Err(()),
+        }
+    }
+
+    if hex_str.len() & 1 != 0 {
+        return Err(());
+    }
+
+    let mut result = Vec::with_capacity(hex_str.len() / 2);
+    for digits in hex_str.as_bytes().chunks(2) {
+        let hi = from_digit(digits[0])?;
+        let lo = from_digit(digits[1])?;
+        result.push((hi << 4) | lo);
+    }
+    Ok(result)
 }
 
 fn verify_github_request(secret: &Option<String>, payload: &Bytes, tag: Option<&[u8]>) -> bool {
@@ -72,8 +103,12 @@ fn verify_github_request(secret: &Option<String>, payload: &Bytes, tag: Option<&
         if let Some(tag) = tag {
             let tag = String::from_utf8_lossy(tag);
             let key = hmac::Key::new(hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, secret.as_bytes());
-            tag.starts_with("sha1=")
-                && hmac::verify(&key, payload.as_ref(), tag[5..].as_bytes()).is_ok()
+            if let Ok(tagbytes) = from_hex(&tag[5..]) {
+                tag.starts_with("sha1=")
+                    && hmac::verify(&key, payload.as_ref(), tagbytes.as_slice()).is_ok()
+            } else {
+                false
+            }
         } else {
             false
         }

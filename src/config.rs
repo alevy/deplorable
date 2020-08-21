@@ -47,7 +47,7 @@ impl Repo {
                     .arg(location);
                 if cmd.status()?.success() {
                     eprintln!(
-                        "Built \"{}\" at ref \"{}\" successfully",
+                        "Successfully built \"{}\" at ref \"{}\"",
                         self.repo, self.reference
                     );
                     break;
