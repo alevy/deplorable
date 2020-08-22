@@ -5,46 +5,58 @@ use std::sync::{Arc, Condvar, Mutex};
 use crate::config;
 use crate::server;
 
-#[derive(Clone)]
-pub struct Nixlify {
-    conditions: BTreeMap<String, Arc<(Mutex<bool>, Condvar, Option<String>)>>,
+struct Worker {
+    repo: config::Repo,
+    condition: Arc<(Mutex<bool>, Condvar)>
 }
 
-impl Nixlify {
-    pub fn new(config: config::Config) -> Nixlify {
-        let conditions = {
-            let mut map = BTreeMap::new();
-            for (slug, repo) in config.repos.iter() {
-                let pair = Arc::new((Mutex::new(false), Condvar::new(), repo.secret.clone()));
-                let tpair = pair.clone();
-                let repo = repo.clone();
-                map.insert(slug.clone(), pair);
-                std::thread::spawn(move || {
-                    let _ = repo.build();
-                    let (lock, cvar, _) = &*tpair;
-                    loop {
-                        {
-                            let mut started = lock.lock().unwrap();
-                            while !*started {
-                                started = cvar.wait(started).unwrap();
-                            }
-                            *started = false;
-                        }
-                        let _ = repo.build();
-                    }
-                });
+impl Worker {
+    fn spawn(self) {
+        std::thread::spawn(move || {
+            let _ = self.repo.build();
+            let (lock, cvar) = &*self.condition;
+            loop {
+                let mut started = lock.lock().unwrap();
+                while !*started {
+                    started = cvar.wait(started).unwrap();
+                }
+                *started = false;
+                drop(started); // releases the mutex
+                let _ = self.repo.build();
             }
-            map
-        };
-        Nixlify { conditions }
+        });
     }
 }
 
-impl server::Handler for Nixlify {
+#[derive(Clone)]
+pub struct Deplorable {
+    conditions: BTreeMap<String, (Arc<(Mutex<bool>, Condvar)>, Option<String>)>,
+}
+
+impl Deplorable {
+    pub fn new(config: config::Config) -> Self {
+        let conditions = {
+            let mut map = BTreeMap::new();
+            for (slug, repo) in config.repos.iter() {
+                let condition = Arc::new((Mutex::new(false), Condvar::new()));
+                let worker = Worker {
+                    repo: repo.clone(),
+                    condition: condition.clone(),
+                };
+                map.insert(slug.clone(), (condition, repo.secret.clone()));
+                worker.spawn();
+            }
+            map
+        };
+        Deplorable { conditions }
+    }
+}
+
+impl server::Handler for Deplorable {
     fn handle_request(&mut self, request: &http::Request<Bytes>) -> http::Response<Bytes> {
         let path = request.uri().path();
-        if let Some(pair) = self.conditions.get(&path[1..].to_string()) {
-            let (lock, cvar, secret) = &**pair;
+        if let Some((condition, secret)) = self.conditions.get(&path[1..].to_string()) {
+            let (lock, cvar) = &**condition;
             if verify_github_request(
                 secret,
                 &request.body(),

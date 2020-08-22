@@ -25,7 +25,7 @@ impl Repo {
         );
         let mut easy = Easy::new();
         easy.url(url.as_str())?;
-        easy.useragent("Nix builder")?;
+        easy.useragent("Deplorable")?;
         if let Some(token) = self.token.as_ref() {
             let mut headers = List::new();
             headers.append(format!("Authorization: token {}", token).as_str())?;

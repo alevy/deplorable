@@ -24,7 +24,7 @@ rec {
   #
 
   rootCrate = rec {
-    packageId = "nixlify";
+    packageId = "deplorable";
 
     # Use this attribute to refer to the derivation building your root crate package.
     # You can override the features with rootCrate.build.override { features = [ "default" "feature1" ... ]; }.
@@ -44,10 +44,10 @@ rec {
   # You can override the features with
   # workspaceMembers."${crateName}".build.override { features = [ "default" "feature1" ... ]; }.
   workspaceMembers = {
-    "nixlify" = rec {
-      packageId = "nixlify";
+    "deplorable" = rec {
+      packageId = "deplorable";
       build = internal.buildRustCrateWithFeatures {
-        packageId = "nixlify";
+        packageId = "deplorable";
       };
 
       # Debug support which might change between releases.
@@ -375,6 +375,55 @@ rec {
         };
         resolvedDefaultFeatures = [ "openssl-sys" "ssl" ];
       };
+      "deplorable" = rec {
+        crateName = "deplorable";
+        version = "0.1.0";
+        edition = "2018";
+        crateBin = [
+          { name = "deplorable"; path = "src/main.rs"; }
+        ];
+        src = (builtins.filterSource sourceFilter ./.);
+        authors = [
+          "Amit Aryeh Levy <amit@amitlevy.com>"
+        ];
+        dependencies = [
+          {
+            name = "bytes";
+            packageId = "bytes";
+          }
+          {
+            name = "clap";
+            packageId = "clap";
+            features = [ "yaml" ];
+          }
+          {
+            name = "curl";
+            packageId = "curl";
+          }
+          {
+            name = "http";
+            packageId = "http";
+          }
+          {
+            name = "httparse";
+            packageId = "httparse";
+          }
+          {
+            name = "ring";
+            packageId = "ring";
+          }
+          {
+            name = "serde";
+            packageId = "serde";
+            features = [ "derive" ];
+          }
+          {
+            name = "serde_yaml";
+            packageId = "serde_yaml";
+          }
+        ];
+        
+      };
       "dtoa" = rec {
         crateName = "dtoa";
         version = "0.4.6";
@@ -582,55 +631,6 @@ rec {
         features = {
           "kv_unstable_sval" = [ "kv_unstable" "sval/fmt" ];
         };
-      };
-      "nixlify" = rec {
-        crateName = "nixlify";
-        version = "0.1.0";
-        edition = "2018";
-        crateBin = [
-          { name = "nixlify"; path = "src/main.rs"; }
-        ];
-        src = (builtins.filterSource sourceFilter ./.);
-        authors = [
-          "Amit Aryeh Levy <amit@amitlevy.com>"
-        ];
-        dependencies = [
-          {
-            name = "bytes";
-            packageId = "bytes";
-          }
-          {
-            name = "clap";
-            packageId = "clap";
-            features = [ "yaml" ];
-          }
-          {
-            name = "curl";
-            packageId = "curl";
-          }
-          {
-            name = "http";
-            packageId = "http";
-          }
-          {
-            name = "httparse";
-            packageId = "httparse";
-          }
-          {
-            name = "ring";
-            packageId = "ring";
-          }
-          {
-            name = "serde";
-            packageId = "serde";
-            features = [ "derive" ];
-          }
-          {
-            name = "serde_yaml";
-            packageId = "serde_yaml";
-          }
-        ];
-        
       };
       "once_cell" = rec {
         crateName = "once_cell";

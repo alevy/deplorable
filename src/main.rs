@@ -1,14 +1,14 @@
 use std::net::TcpListener;
 
 mod config;
-mod nixlify;
+mod app;
 mod server;
 
-use nixlify::Nixlify;
+use app::Deplorable;
 
 fn main() -> Result<(), std::io::Error> {
-    use clap::{App, Arg};
-    let arg_matches = App::new("Nixhub Builder")
+    use clap::Arg;
+    let arg_matches = clap::App::new("Nixhub Builder")
         .arg(
             Arg::with_name("config file")
                 .short("c")
@@ -42,7 +42,7 @@ fn main() -> Result<(), std::io::Error> {
     };
     let listen = arg_matches.value_of("listen").expect("listen").clone();
 
-    let app = Nixlify::new(config);
+    let app = Deplorable::new(config);
     let server = server::Server::new(TcpListener::bind(listen)?, app);
     server.run()
 }
