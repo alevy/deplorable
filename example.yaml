@@ -2,13 +2,13 @@ repos:
   # Site 1 is in a public repo
   site1:
     repo: myuser/mysite1
-    reference: master
+    reference: refs/heads/master
     out: /var/www/site1
     secret: mysecretkey1
   # Site 2 is in a private repo, so it needs a token to access
   site2:
     repo: myuser/mysite2
-    reference: beta
+    reference: refs/heads/beta
     out: /var/www/site2
     secret: mysecretkey2
     token: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA

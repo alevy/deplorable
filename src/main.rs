@@ -1,7 +1,7 @@
 use std::net::TcpListener;
 
-mod config;
 mod app;
+mod config;
 mod server;
 
 use app::Deplorable;

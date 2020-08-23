@@ -1,4 +1,6 @@
 use bytes::Bytes;
+use http::status::StatusCode;
+use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Condvar, Mutex};
 
@@ -7,7 +9,7 @@ use crate::server;
 
 struct Worker {
     repo: config::Repo,
-    condition: Arc<(Mutex<bool>, Condvar)>
+    condition: Arc<(Mutex<bool>, Condvar)>,
 }
 
 impl Worker {
@@ -28,9 +30,15 @@ impl Worker {
     }
 }
 
+#[derive(Deserialize)]
+struct GitHubPushEvent {
+    #[serde(rename(deserialize = "ref"))]
+    reference: String,
+}
+
 #[derive(Clone)]
 pub struct Deplorable {
-    conditions: BTreeMap<String, (Arc<(Mutex<bool>, Condvar)>, Option<String>)>,
+    conditions: BTreeMap<String, (Arc<(Mutex<bool>, Condvar)>, config::Repo)>,
 }
 
 impl Deplorable {
@@ -43,61 +51,78 @@ impl Deplorable {
                     repo: repo.clone(),
                     condition: condition.clone(),
                 };
-                map.insert(slug.clone(), (condition, repo.secret.clone()));
+                map.insert(slug.clone(), (condition, repo.clone()));
                 worker.spawn();
             }
             map
         };
         Deplorable { conditions }
     }
+
+    fn handle_repo_request(
+        &self,
+        request: &http::Request<Bytes>,
+        path: &str,
+    ) -> DeplorableResult<()> {
+        let (condition, repo) = self
+            .conditions
+            .get(&path[1..].to_string())
+            .ok_or(http::StatusCode::NOT_FOUND)?;
+        let (lock, cvar) = &**condition;
+
+        verify_github_request(
+            &repo.secret,
+            &request.body(),
+            request
+                .headers()
+                .get("x-hub-signature")
+                .map(|v| v.as_bytes()),
+        )?;
+
+        let event_type = request
+            .headers()
+            .get("x-github-event")
+            .ok_or(StatusCode::BAD_REQUEST)?;
+        let event_body: GitHubPushEvent =
+            serde_yaml::from_slice(request.body().as_ref()).or(Err(StatusCode::BAD_REQUEST))?;
+        if event_type == "push" && event_body.reference == repo.reference {
+            let mut started = lock.lock().unwrap();
+            *started = true;
+            cvar.notify_one();
+        }
+        Ok(())
+    }
 }
+
+type DeplorableResult<T> = Result<T, StatusCode>;
 
 impl server::Handler for Deplorable {
     fn handle_request(&mut self, request: &http::Request<Bytes>) -> http::Response<Bytes> {
         let path = request.uri().path();
-        if let Some((condition, secret)) = self.conditions.get(&path[1..].to_string()) {
-            let (lock, cvar) = &**condition;
-            if verify_github_request(
-                secret,
-                &request.body(),
-                request
-                    .headers()
-                    .get("x-hub-signature")
-                    .map(|v| v.as_bytes()),
-            ) {
-                let mut started = lock.lock().unwrap();
-                *started = true;
-                cvar.notify_one();
-                http::Response::builder()
-                    .body(request.body().clone())
-                    .unwrap()
-            } else {
-                http::Response::builder()
-                    .status(http::status::StatusCode::UNAUTHORIZED)
-                    .body(Bytes::new())
-                    .unwrap()
-            }
-        } else {
-            http::Response::builder()
-                .status(http::status::StatusCode::NOT_FOUND)
+        match self.handle_repo_request(request, path) {
+            Ok(_) => http::Response::builder()
+                .body(request.body().clone())
+                .unwrap(),
+            Err(status_code) => http::Response::builder()
+                .status(status_code)
                 .body(Bytes::new())
-                .unwrap()
+                .unwrap(),
         }
     }
 }
 
-pub fn from_hex(hex_str: &str) -> Result<Vec<u8>, ()> {
-    fn from_digit(digit: u8) -> Result<u8, ()> {
+fn from_hex(hex_str: &str) -> DeplorableResult<Vec<u8>> {
+    fn from_digit(digit: u8) -> DeplorableResult<u8> {
         match digit {
             b'0'..=b'9' => Ok(digit - b'0'),
             b'A'..=b'F' => Ok(10 + digit - b'A'),
             b'a'..=b'f' => Ok(10 + digit - b'a'),
-            _ => Err(()),
+            _ => return Err(StatusCode::BAD_REQUEST),
         }
     }
 
     if hex_str.len() & 1 != 0 {
-        return Err(());
+        return Err(StatusCode::BAD_REQUEST);
     }
 
     let mut result = Vec::with_capacity(hex_str.len() / 2);
@@ -109,22 +134,27 @@ pub fn from_hex(hex_str: &str) -> Result<Vec<u8>, ()> {
     Ok(result)
 }
 
-fn verify_github_request(secret: &Option<String>, payload: &Bytes, tag: Option<&[u8]>) -> bool {
+fn verify_github_request(
+    secret: &Option<String>,
+    payload: &Bytes,
+    tag: Option<&[u8]>,
+) -> DeplorableResult<()> {
     use ring::hmac;
     if let Some(secret) = secret {
         if let Some(tag) = tag {
             let tag = String::from_utf8_lossy(tag);
             let key = hmac::Key::new(hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, secret.as_bytes());
-            if let Ok(tagbytes) = from_hex(&tag[5..]) {
-                tag.starts_with("sha1=")
-                    && hmac::verify(&key, payload.as_ref(), tagbytes.as_slice()).is_ok()
+            let tagbytes = from_hex(&tag[5..])?;
+            if tag.starts_with("sha1=") {
+                hmac::verify(&key, payload.as_ref(), tagbytes.as_slice())
+                    .or(Err(StatusCode::UNAUTHORIZED))
             } else {
-                false
+                Err(StatusCode::BAD_REQUEST)
             }
         } else {
-            false
+            Err(StatusCode::UNAUTHORIZED)
         }
     } else {
-        true
+        Ok(())
     }
 }
