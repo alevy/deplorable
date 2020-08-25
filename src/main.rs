@@ -8,7 +8,7 @@ use app::Deplorable;
 
 fn main() -> Result<(), std::io::Error> {
     use clap::Arg;
-    let arg_matches = clap::App::new("Nixhub Builder")
+    let arg_matches = clap::App::new("Deplorable Repo Deployer")
         .arg(
             Arg::with_name("config file")
                 .short("c")
@@ -44,5 +44,6 @@ fn main() -> Result<(), std::io::Error> {
 
     let app = Deplorable::new(config);
     let server = server::Server::new(TcpListener::bind(listen)?, app);
+    println!("Listening for web hooks on {}", listen);
     server.run()
 }
