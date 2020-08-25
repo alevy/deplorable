@@ -1,0 +1,5 @@
+baseURL: http://deplorable.mostlytyped.org/
+languageCode: en-us
+title: "Deplorable Repo Deployer"
+params:
+  repo: https://github.com/alevy/deplorable

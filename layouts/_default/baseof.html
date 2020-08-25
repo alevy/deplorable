@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="shortcut icon" type="image/png" href="favicon.png">
+  <title>{{ block "title" . }}
+    {{ .Site.Title }} - {{ .Title }}
+  {{ end }}</title>
+</head>
+<body>
+  <header>
+    <h1>{{ .Site.Title }}</h1>
+    <nav>
+      <ul>
+        <li><a href="{{ .Site.Params.Repo }}">Source Code</a></li>
+      </ul>
+    </nav>
+  </header>
+  <div id="content">
+    {{ block "main" . }}{{ end }}
+  </div>
+  <footer>
+    <a rel="license" href="http://creativecommons.org/licenses/by-nc/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc/4.0/80x15.png" /></a><br />This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons Attribution-NonCommercial 4.0 International License</a>.
+  </footer>
+</body>
+</html>
