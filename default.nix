@@ -6,7 +6,7 @@ stdenv.mkDerivation {
   buildInputs = [ hugo ];
   builder = writeText "builder.sh" ''
     source ${stdenv}/setup
-    hugo -d $out -s $src
+    HUGO_RESOURCEDIR=$TMP hugo -e production -d $out -s $src
     '';
   src = ./.;
 }
