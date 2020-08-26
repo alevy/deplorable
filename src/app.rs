@@ -83,14 +83,22 @@ impl Deplorable {
             .headers()
             .get("x-github-event")
             .ok_or(StatusCode::BAD_REQUEST)?;
-        let event_body: GitHubPushEvent =
-            serde_yaml::from_slice(request.body().as_ref()).or(Err(StatusCode::BAD_REQUEST))?;
-        if event_type == "push" && event_body.reference == repo.reference {
-            let mut started = lock.lock().unwrap();
-            *started = true;
-            cvar.notify_one();
+        match event_type.as_bytes() {
+            b"push" => {
+                let event_body: GitHubPushEvent =
+                    serde_yaml::from_slice(request.body().as_ref()).or(Err(StatusCode::BAD_REQUEST))?;
+                if event_body.reference != repo.reference {
+                    Err(StatusCode::BAD_REQUEST)
+                } else {
+                    println!("Push request for {}", repo.repo);
+                    let mut started = lock.lock().unwrap();
+                    *started = true;
+                    cvar.notify_one();
+                    Ok(())
+                }
+            },
+            _ => Ok(())
         }
-        Ok(())
     }
 }
 
