@@ -377,7 +377,7 @@ rec {
       };
       "deplorable" = rec {
         crateName = "deplorable";
-        version = "0.1.0";
+        version = "0.1.1";
         edition = "2018";
         crateBin = [
           { name = "deplorable"; path = "src/main.rs"; }
