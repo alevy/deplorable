@@ -3,6 +3,9 @@ name = "deplorable"
 version = "0.1.0"
 authors = ["Amit Aryeh Levy <amit@amitlevy.com>"]
 edition = "2018"
+license-file = "LICENSE"
+description = "A simple & small daemon to deploy static website and other code from GitHub webhooks"
+repository = "https://github.com/alevy/deplorable"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
