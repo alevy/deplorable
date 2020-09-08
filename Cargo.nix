@@ -127,9 +127,9 @@ rec {
       };
       "autocfg" = rec {
         crateName = "autocfg";
-        version = "1.0.0";
+        version = "1.0.1";
         edition = "2015";
-        sha256 = "17cv6pwb4q08s0ynpr4n8hv5299hcmhdgvdchzixfpw8y5qcgapq";
+        sha256 = "0jj6i9zn4gjl03kjvziqdji6rwx8ykz8zk2ngpc331z2g3fk3c6d";
         authors = [
           "Josh Stone <cuviper@gmail.com>"
         ];
@@ -550,9 +550,9 @@ rec {
       };
       "libc" = rec {
         crateName = "libc";
-        version = "0.2.74";
+        version = "0.2.76";
         edition = "2015";
-        sha256 = "045x2imb534fkl33wv97jrr2x0jrzdlg5xzm5n159dvqrwijiw52";
+        sha256 = "1hvv01y8cjlkg6xqgvflgq4p77p15a83w6xxpcggmrj4w3x5cm3m";
         authors = [
           "The Rust Project Developers"
         ];
@@ -565,9 +565,9 @@ rec {
       };
       "libz-sys" = rec {
         crateName = "libz-sys";
-        version = "1.1.0";
+        version = "1.1.2";
         edition = "2015";
-        sha256 = "1sasky1swzcjzx9l059f4yfj6kdpwn66r1k1lb7cr1fqim5r4rxg";
+        sha256 = "0mcn8991kpmw320923hlcmci834nkv1qakkcg4w8znq85cci68b0";
         authors = [
           "Alex Crichton <alex@alexcrichton.com>"
           "Josh Triplett <josh@joshtriplett.org>"
@@ -706,9 +706,9 @@ rec {
       };
       "proc-macro2" = rec {
         crateName = "proc-macro2";
-        version = "1.0.19";
+        version = "1.0.20";
         edition = "2018";
-        sha256 = "04lb4n7g5z9mq6in39i7yb1m5bb107dfawc2rf4227npnn2z1x84";
+        sha256 = "0a8sgk1i60nz7qlf611dxj1npawbv9nb0ch2lafvk7bialym2p0p";
         authors = [
           "Alex Crichton <alex@alexcrichton.com>"
           "David Tolnay <dtolnay@gmail.com>"
@@ -990,9 +990,9 @@ rec {
       };
       "syn" = rec {
         crateName = "syn";
-        version = "1.0.38";
+        version = "1.0.40";
         edition = "2018";
-        sha256 = "1x61j0bl5sqdxjzcag2gnh7ynlshps9sb9wphl1v7599j4jbr6p6";
+        sha256 = "0l437lsnv289y64pgl2mfvr1vgrb2hix5bb5a4rbjncvqly7sgwn";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
         ];
