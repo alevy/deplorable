@@ -88,7 +88,7 @@ impl Deplorable {
                 let event_body: GitHubPushEvent =
                     serde_yaml::from_slice(request.body().as_ref()).or(Err(StatusCode::BAD_REQUEST))?;
                 if event_body.reference != repo.reference {
-                    Err(StatusCode::BAD_REQUEST)
+                    Err(StatusCode::ACCEPTED)
                 } else {
                     println!("Push request for {}", repo.repo);
                     let mut started = lock.lock().unwrap();
