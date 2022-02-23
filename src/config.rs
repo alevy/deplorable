@@ -2,6 +2,7 @@ use curl::easy::{Easy, List};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::time::Duration;
+use std::io::{Error, ErrorKind};
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
@@ -18,20 +19,46 @@ pub struct Repo {
 }
 
 impl Repo {
-    pub fn request_tarball_location(&self) -> Result<Option<String>, std::io::Error> {
-        let url = format!(
-            "https://api.github.com/repos/{}/tarball/{}",
-            self.repo, self.reference
-        );
+    pub fn request_tarball_location(&self) -> Result<Option<String>, Error> {
         let mut easy = Easy::new();
-        easy.url(url.as_str())?;
         easy.useragent("Deplorable")?;
         if let Some(token) = self.token.as_ref() {
             let mut headers = List::new();
             headers.append(format!("Authorization: token {}", token).as_str())?;
             easy.http_headers(headers)?;
         }
-        easy.perform()?;
+
+        #[derive(Deserialize)]
+        struct Commit {
+            pub sha: String,
+        }
+
+        let commit: Commit = {
+            easy.url(format!("https://api.github.com/repos/{}/commits/{}",
+                    self.repo, self.reference).as_str())?;
+            let mut body = Vec::new();
+            {
+                let mut transfer = easy.transfer();
+                transfer.write_function(|data| {
+                    body.extend_from_slice(data);
+                    Ok(data.len())
+                })?;
+                transfer.perform()?;
+            }
+            match easy.response_code()? {
+                200 => serde_yaml::from_slice(body.as_ref()).map_err(|e| Error::new(ErrorKind::Other, e))?,
+                code => {
+                    return Err(Error::new(ErrorKind::InvalidInput, format!("Repository not accessible ({})", code)));
+                }
+            }
+        };
+
+        let url = format!(
+            "https://api.github.com/repos/{}/tarball/{}",
+            self.repo, commit.sha
+        );
+        easy.url(url.as_str())?;
+        easy.transfer().perform()?;
         Ok(easy.redirect_url()?.map(|s| s.to_string()))
     }
 

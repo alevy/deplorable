@@ -15,7 +15,9 @@ struct Worker {
 impl Worker {
     fn spawn(self) {
         std::thread::spawn(move || {
-            let _ = self.repo.build();
+            if let Err(e) =  self.repo.build() {
+                eprintln!("Failed to build repo {} ({})", self.repo.repo, e);
+            }
             let (lock, cvar) = &*self.condition;
             loop {
                 let mut started = lock.lock().unwrap();

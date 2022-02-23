@@ -1,4 +1,8 @@
 repos:
+  test1:
+    repo: alevy/alevy.github.io
+    reference: refs/heads/master
+    out: testres
   # Site 1 is in a public repo
   site1:
     repo: myuser/mysite1
