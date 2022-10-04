@@ -39,11 +39,9 @@ impl Repo {
         let mut dt = 200;
         loop {
             if let Some(location) = self.request_tarball_location()? {
-                let mut cmd = std::process::Command::new("nix");
-                cmd.arg("build")
-                    .arg("--out-link")
+                let mut cmd = std::process::Command::new("nix-build");
+                cmd.arg("--out-link")
                     .arg(&self.out)
-                    .arg("-f")
                     .arg(location);
                 if cmd.status()?.success() {
                     eprintln!(
