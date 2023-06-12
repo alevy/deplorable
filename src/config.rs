@@ -1,4 +1,5 @@
-use curl::easy::{Easy, List};
+use reqwest::redirect::Policy;
+use reqwest::{header, blocking::Client};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -18,24 +19,45 @@ pub struct Repo {
 }
 
 impl Repo {
-    pub fn request_tarball_location(&self) -> Result<Option<String>, std::io::Error> {
-        let url = format!(
-            "https://api.github.com/repos/{}/tarball/{}",
-            self.repo, self.reference
-        );
-        let mut easy = Easy::new();
-        easy.url(url.as_str())?;
-        easy.useragent("Deplorable")?;
+    pub fn request_tarball_location(&self) -> Result<Option<String>, Box<dyn std::error::Error>> {
+        let mut builder = Client::builder().user_agent("Deplorable").redirect(Policy::none());
         if let Some(token) = self.token.as_ref() {
-            let mut headers = List::new();
-            headers.append(format!("Authorization: token {}", token).as_str())?;
-            easy.http_headers(headers)?;
+            let mut headers = header::HeaderMap::new();
+            headers.insert(header::AUTHORIZATION, header::HeaderValue::from_str(format!("token {}", token).as_str())?);
+            builder = builder.default_headers(headers);
         }
-        easy.perform()?;
-        Ok(easy.redirect_url()?.map(|s| s.to_string()))
+
+        let client = builder.build()?;
+
+        let commit = {
+            let url = format!(
+                "https://api.github.com/repos/{}/branches/{}",
+                self.repo, self.reference
+            );
+            #[derive(Deserialize)]
+            struct Commit {
+                sha: String,
+            }
+            #[derive(Deserialize)]
+            struct Branch {
+                commit: Commit,
+            }
+            let branch: Branch = client.get(url).send()?.json()?;
+            branch.commit.sha
+        };
+
+        {
+            let url = format!(
+                "https://api.github.com/repos/{}/tarball/{}",
+                self.repo, commit
+            );
+
+            let location = client.get(url).send()?.headers().get(header::LOCATION).and_then(|s| s.to_str().ok()).map(String::from);
+            Ok(location)
+        }
     }
 
-    pub fn build(&self) -> Result<(), std::io::Error> {
+    pub fn build(&self) -> Result<(), Box<dyn std::error::Error>> {
         let mut dt = 200;
         loop {
             if let Some(location) = self.request_tarball_location()? {
